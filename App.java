@@ -1,5 +1,7 @@
 import com.sun.net.httpserver.HttpServer; // Webサーバーの機能を読み込みます
 import java.net.InetSocketAddress; // 待ち受けるポート番号を指定する機能を読み込みます
+import java.net.URLDecoder; // 追加：%から始まるURLエンコード文字を元に戻す機能を読み込みます
+import java.nio.charset.StandardCharsets; // 追加：文字コードにUTF-8を指定する機能を読み込みます
 
 public class App { // Appという名前のプログラムを定義します
     public static void main(String[] args) throws Exception { // プログラムの開始地点を定義します
@@ -9,7 +11,11 @@ public class App { // Appという名前のプログラムを定義します
             String message;
             // パスを比べて、返す文字を振り分けます
             if (path.equals("/hello")) {
-                message = "こんにちは！";
+                String query = exchange.getRequestURI().getRawQuery(); // 追加：URLのクエリを取り出します
+                System.out.println("query = " + query);
+                String encodedName = query == null ? null : query.substring(5); // 変更：デコード前の名前を取り出します
+                String name = encodedName == null ? "ゲスト" : URLDecoder.decode(encodedName, StandardCharsets.UTF_8); // 追加：%形式を日本語に戻します
+                message = "こんにちは、" + name + "さん！"; // 変更：切り出した名前を応答に混ぜます
             } else if (path.equals("/bye")) {
                 message = "さようなら！";
             } else if (path.equals("/main")) {
