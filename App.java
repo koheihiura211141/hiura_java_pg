@@ -93,9 +93,68 @@ public class App { // Appという名前のプログラムを定義します
         return todos; // ★変更：DBから読んだ一覧を返します
     }
 
+    static String todosToJson(List<Todo> todos) { // Todo一覧をJSON配列へ変換します
+        StringBuilder json = new StringBuilder("["); // JSON配列の開始記号を追加します
+        for (int i = 0; i < todos.size(); i++) { // Todoを先頭から順番に処理します
+            if (i > 0) { // 先頭以外のTodoか確認します
+                json.append(','); // Todo同士を区切るカンマを追加します
+            } // カンマの追加判定はここまでです
+            Todo todo = todos.get(i); // 現在のTodoを取り出します
+            json.append("{\"title\":\""); // title項目の開始部分を追加します
+            json.append(escapeJson(todo.getTitle())); // タイトルをエスケープして追加します
+            json.append("\",\"done\":"); // done項目の開始部分を追加します
+            json.append(todo.isDone()); // 完了状態をtrueまたはfalseで追加します
+            json.append('}'); // Todoオブジェクトの終了記号を追加します
+        } // Todoを順番に処理するループはここまでです
+        json.append(']'); // JSON配列の終了記号を追加します
+        return json.toString(); // 完成したJSON文字列を返します
+    } // Todo一覧をJSONへ変換する処理はここまでです
+
+    static String escapeJson(String value) { // JSON文字列として安全になるよう特殊文字を変換します
+        StringBuilder escaped = new StringBuilder(); // 変換後の文字列を組み立てます
+        for (int i = 0; i < value.length(); i++) { // 元の文字列を一文字ずつ処理します
+            char character = value.charAt(i); // 現在の文字を取り出します
+            switch (character) { // 特別な変換が必要な文字を判定します
+                case '"' -> escaped.append("\\\""); // ダブルクォートをエスケープします
+                case '\\' -> escaped.append("\\\\"); // バックスラッシュをエスケープします
+                case '\b' -> escaped.append("\\b"); // バックスペースをエスケープします
+                case '\f' -> escaped.append("\\f"); // フォームフィードをエスケープします
+                case '\n' -> escaped.append("\\n"); // 改行をエスケープします
+                case '\r' -> escaped.append("\\r"); // 復帰をエスケープします
+                case '\t' -> escaped.append("\\t"); // タブをエスケープします
+                default -> { // そのほかの文字を処理します
+                    if (character < 0x20) { // JSONに直接書けない制御文字か確認します
+                        escaped.append(String.format("\\u%04x", (int) character)); // 制御文字をUnicode形式でエスケープします
+                    } else { // 通常の文字の場合を処理します
+                        escaped.append(character); // 文字をそのまま追加します
+                    } // 制御文字の判定はここまでです
+                } // そのほかの文字の処理はここまでです
+            } // 現在の文字の変換はここまでです
+        } // 全文字を処理するループはここまでです
+        return escaped.toString(); // エスケープ済みの文字列を返します
+    } // JSON文字列のエスケープ処理はここまでです
+
     public static void main(String[] args) throws Exception { // プログラムの開始地点を定義します
         createTable(); // ★変更：起動時にtodos表がなければ作ります
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0); // 8080番ポートでWebサーバーを用意します
+        server.createContext("/api/todos", exchange -> { // Todo一覧APIへのアクセスを処理します
+            if (!exchange.getRequestMethod().equals("GET")) { // GET以外のリクエストか確認します
+                exchange.sendResponseHeaders(405, -1); // 許可されていないメソッドとして返します
+                exchange.close(); // 通信を終了します
+                return; // APIの処理をここで終えます
+            } // メソッドの確認はここまでです
+            String json; // 返却するJSON文字列を用意します
+            try { // データベースからTodo一覧を読み出します
+                json = todosToJson(findAllTodos()); // 全TodoをJSON配列へ変換します
+            } catch (SQLException e) { // データベースエラーを受け取ります
+                throw new IOException("Todo一覧の読み出しに失敗しました", e); // HTTP処理のエラーとして扱います
+            } // Todo一覧の読み出しはここまでです
+            byte[] body = json.getBytes(StandardCharsets.UTF_8); // JSONをUTF-8の送信データへ変換します
+            exchange.getResponseHeaders().set("Content-Type", "application/json"); // charsetなしのJSON形式を指定します
+            exchange.sendResponseHeaders(200, body.length); // 正常応答とデータの長さを送ります
+            exchange.getResponseBody().write(body); // JSONデータをレスポンスへ書き込みます
+            exchange.getResponseBody().close(); // レスポンスの送信を終了します
+        }); // Todo一覧APIの定義はここまでです
         server.createContext("/", exchange -> { // 「/」へのアクセスを受けたときの処理を定義します
             String path = exchange.getRequestURI().getPath(); // アクセスされたパスを取り出します
             String method = exchange.getRequestMethod(); // 追加：GETかPOSTかを取り出します
